@@ -1,0 +1,16 @@
+<resources>
+    <!-- The Activity shell theme.
+         Night mode is enforced in code via AppCompatDelegate.setDefaultNightMode(MODE_NIGHT_YES).
+         android:windowLightStatusBar=false keeps icons white on our dark bg on all OS versions. -->
+    <style name="Theme.HabitFlow" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/background</item>
+        <item name="android:statusBarColor">@color/background</item>
+        <item name="android:navigationBarColor">@color/background</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+
+    <!-- Splash window — same bg color so there is no white flash on cold start -->
+    <style name="Theme.HabitFlow.Splash" parent="Theme.HabitFlow">
+        <item name="android:windowBackground">@color/background</item>
+    </style>
+</resources>

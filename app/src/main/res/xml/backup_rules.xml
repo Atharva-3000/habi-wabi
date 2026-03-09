@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Android Auto Backup rules (API 23+).
+    The Room database and DataStore files are included in cloud backup.
+    Cache is excluded.
+-->
+<full-backup-content>
+    <!-- Include the Room database -->
+    <include domain="database" path="habiwabi.db" />
+    <include domain="database" path="habiwabi.db-shm" />
+    <include domain="database" path="habiwabi.db-wal" />
+    <!-- Include DataStore preferences -->
+    <include domain="file" path="datastore/" />
+    <!-- Exclude cache -->
+    <exclude domain="cache" path="." />
+    <exclude domain="external-cache" path="." />
+</full-backup-content>
