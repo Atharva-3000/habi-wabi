@@ -44,6 +44,11 @@ cd habi-wabi
 
 Open the project in **Android Studio Meerkat** (or newer) and deploy to your connected device.
 
-## 🤝 Open Source
+## ⚖️ License
 
-Habi Wabi is completely free and open source. Feel free to fork, build, and use the code. 
+This project is licensed under the **MIT License**. 
+
+You are free to use, modify, and distribute this software, as long as the original copyright and license notice are included. 
+
+**If you use this code in your own projects, please provide attribution linking back to this repository:**
+`https://github.com/Atharva-3000/habi-wabi`
