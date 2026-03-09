@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="app-logo.png" width="150" alt="Habi Wabi Logo">
+</p>
+
 # Habi Wabi 禅
 
 Habi Wabi is a minimal, beautifully animated, open-source habit and health tracker built for Android with Jetpack Compose. It embraces the philosophy of Wabi-Sabi—finding beauty in imperfection and impermanence—by encouraging small, consistent, daily habits.
