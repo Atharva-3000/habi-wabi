@@ -66,7 +66,9 @@ fun NavGraph(navController: NavHostController) {
             TodoScreen()
         }
         composable(Screen.Settings.route) {
-            SettingsScreen()
+            SettingsScreen(
+                onNavigateToWeightHistory = { navController.navigate(Screen.WeightHistory.route) }
+            )
         }
 
         // ── Full-screen flows ──────────────────────────────────────────────
@@ -78,6 +80,11 @@ fun NavGraph(navController: NavHostController) {
         composable(Screen.Water.route) {
             WaterTrackingScreen(
                 onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        composable(Screen.WeightHistory.route) {
+            com.habitflow.app.ui.settings.WeightHistoryScreen(
+                onBack = { navController.popBackStack() }
             )
         }
     }

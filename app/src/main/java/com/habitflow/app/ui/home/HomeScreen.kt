@@ -25,6 +25,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
@@ -82,9 +84,11 @@ fun HomeScreen(
     val health by viewModel.healthSnapshot.collectAsState()
     val doneCount = habitsWithStatus.count { it.isDoneToday }
     val totalCount = habitsWithStatus.size
+    val unreadCount by viewModel.unreadNotifCount.collectAsState()
 
     // Weight quick-log sheet
     var showWeightSheet by remember { mutableStateOf(false) }
+    val haptic = LocalHapticFeedback.current
 
     Column(
         modifier = Modifier
@@ -95,7 +99,11 @@ fun HomeScreen(
             .statusBarsPadding()
     ) {
         Spacer(Modifier.height(16.dp))
-        HomeHeader(today = today)
+        HomeHeader(
+            today = today,
+            unreadCount = unreadCount,
+            onBellClick = { viewModel.clearNotifications() }
+        )
         Spacer(Modifier.height(20.dp))
 
         if (totalCount > 0) {
@@ -109,13 +117,11 @@ fun HomeScreen(
         TodayHabitsSection(
             habits = habitsWithStatus,
             onAddHabit = onNavigateToCreateHabit,
-            onToggle = { id -> viewModel.toggleHabit(id) }
+            onToggle = { id ->
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                viewModel.toggleHabit(id)
+            }
         )
-
-        if (habitsWithStatus.isNotEmpty()) {
-            Spacer(Modifier.height(28.dp))
-            ContributionMapSection(habitWithStatus = habitsWithStatus.first())
-        }
 
         Spacer(Modifier.height(28.dp))
         HealthStatsSection(
@@ -132,6 +138,7 @@ fun HomeScreen(
             currentKg = health.weightKg,
             onDismiss = { showWeightSheet = false },
             onLog = { kg ->
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 viewModel.logWeight(kg)
                 showWeightSheet = false
             }
@@ -143,12 +150,14 @@ fun HomeScreen(
 // HOME HEADER
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
-private fun HomeHeader(today: LocalDate) {
+private fun HomeHeader(today: LocalDate, unreadCount: Int, onBellClick: () -> Unit) {
     val hour = LocalTime.now().hour
-    val greeting = when {
-        hour < 12 -> "Good morning"
-        hour < 17 -> "Good afternoon"
-        else      -> "Good evening"
+    val (greeting, emoji) = when {
+        hour < 5  -> "Good night" to "🌙"
+        hour < 12 -> "Good morning" to "☀️"
+        hour < 17 -> "Good afternoon" to "🌤️"
+        hour < 21 -> "Good evening" to "🌆"
+        else      -> "Good night" to "🌙"
     }
     val dateStr = today.format(DateTimeFormatter.ofPattern("EEEE, MMMM d", Locale.ENGLISH))
 
@@ -169,14 +178,26 @@ private fun HomeHeader(today: LocalDate) {
             Spacer(Modifier.height(4.dp))
             Text(
                 buildAnnotatedString {
-                    append("$greeting ")
-                    withStyle(SpanStyle(color = GoldAccent, fontWeight = FontWeight.Bold)) { append("✦") }
+                    append("$greeting $emoji ")
                 },
                 style = MaterialTheme.typography.displayLarge
             )
         }
-        IconButton(onClick = {}) {
-            Icon(Icons.Outlined.Notifications, contentDescription = "Notifications", tint = TextTertiary, modifier = Modifier.size(22.dp))
+        // Notification bell with red dot badge
+        Box {
+            IconButton(onClick = onBellClick) {
+                Icon(Icons.Outlined.Notifications, contentDescription = "Notifications", tint = TextTertiary, modifier = Modifier.size(22.dp))
+            }
+            if (unreadCount > 0) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFE85A5A))
+                        .align(Alignment.TopEnd)
+                        .offset(x = (-8).dp, y = 8.dp)
+                )
+            }
         }
     }
 }
@@ -283,13 +304,15 @@ private fun TodayHabitsSection(
     onToggle: (Long) -> Unit
 ) {
     val pendingCount = habits.count { !it.isDoneToday }
+    val haptic = LocalHapticFeedback.current
 
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text("Today", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+        Text("Today", style = MaterialTheme.typography.titleLarge)
         if (pendingCount > 0) {
+            Spacer(Modifier.width(12.dp))
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(20.dp))
@@ -299,12 +322,15 @@ private fun TodayHabitsSection(
                 Text("$pendingCount left", style = MaterialTheme.typography.labelSmall, color = GoldAccent)
             }
         }
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.weight(1f))
         IconButton(
-            onClick = onAddHabit,
+            onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onAddHabit()
+            },
             modifier = Modifier.size(32.dp).clip(CircleShape).background(SurfaceVariant)
         ) {
-            Icon(Icons.Filled.Add, contentDescription = "Add Habit", tint = TextSecondary, modifier = Modifier.size(16.dp))
+            Icon(Icons.Filled.Add, contentDescription = "Add Habit", tint = Color.White, modifier = Modifier.size(16.dp))
         }
     }
 
@@ -326,11 +352,11 @@ private fun TodayHabitsSection(
             }
         }
     } else {
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = 24.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        Column(
+            modifier = Modifier.padding(horizontal = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(habits, key = { it.habit.id }) { hw ->
+            habits.forEach { hw ->
                 HabitCard(habitWithStatus = hw, onToggle = { onToggle(hw.habit.id) })
             }
         }
@@ -341,6 +367,7 @@ private fun TodayHabitsSection(
 private fun HabitCard(habitWithStatus: HabitWithStatus, onToggle: () -> Unit) {
     val habit = habitWithStatus.habit
     val isDone = habitWithStatus.isDoneToday
+    val haptic = LocalHapticFeedback.current
     val habitColor = remember(habit.colorHex) {
         runCatching { Color(android.graphics.Color.parseColor(habit.colorHex)) }.getOrDefault(GoldAccent)
     }
@@ -352,7 +379,7 @@ private fun HabitCard(habitWithStatus: HabitWithStatus, onToggle: () -> Unit) {
 
     Column(
         modifier = Modifier
-            .width(140.dp)
+            .fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
             .background(bgColor)
             .clickable(onClick = onToggle)
@@ -367,12 +394,24 @@ private fun HabitCard(habitWithStatus: HabitWithStatus, onToggle: () -> Unit) {
                 Icon(iconForName(habit.iconName), contentDescription = null, tint = habitColor, modifier = Modifier.size(18.dp))
             }
             Spacer(Modifier.weight(1f))
-            val checkBg by animateColorAsState(targetValue = if (isDone) habitColor else Divider, label = "check_${habit.id}")
+            val checkBg by animateColorAsState(targetValue = if (isDone) habitColor else Surface, label = "check_${habit.id}")
             Box(
-                modifier = Modifier.size(28.dp).clip(RoundedCornerShape(8.dp)).background(checkBg),
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(checkBg)
+                    .border(
+                        1.dp,
+                        if (isDone) Color.Transparent else habitColor.copy(alpha = 0.5f),
+                        RoundedCornerShape(8.dp)
+                    ),
                 contentAlignment = Alignment.Center
             ) {
-                if (isDone) Text("✓", color = Background, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                if (isDone) {
+                    Text("✓", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                } else {
+                    Text("✓", color = habitColor.copy(alpha = 0.5f), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
             }
         }
         Text(habit.title, style = MaterialTheme.typography.titleMedium, maxLines = 1)
@@ -381,71 +420,31 @@ private fun HabitCard(habitWithStatus: HabitWithStatus, onToggle: () -> Unit) {
             style = MaterialTheme.typography.labelSmall,
             color = if (isDone) habitColor else TextTertiary
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-            habitWithStatus.last7Days.forEachIndexed { i, done ->
-                val isToday = i == 6
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(7.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(when { isToday && isDone -> habitColor; done -> habitColor.copy(alpha = 0.5f); else -> Divider })
-                )
-            }
-        }
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// CONTRIBUTION MAP
-// ─────────────────────────────────────────────────────────────────────────────
-@Composable
-private fun ContributionMapSection(habitWithStatus: HabitWithStatus) {
-    val habit = habitWithStatus.habit
-    val habitColor = remember(habit.colorHex) {
-        runCatching { Color(android.graphics.Color.parseColor(habit.colorHex)) }.getOrDefault(GoldAccent)
-    }
-    val today = LocalDate.now()
-    val gridStart = today.minusDays(111)
-
-    val cells = (0..111).map { offset ->
-        val d = gridStart.plusDays(offset.toLong())
-        when {
-            d.isAfter(today) -> 0f
-            offset >= 105 -> if (habitWithStatus.last7Days.getOrElse(offset - 105) { false }) 1f else 0f
-            else -> if (offset % 3 == 0) 0.8f else if (offset % 5 == 0) 0.4f else 0f
-        }
-    }
-
-    Column(modifier = Modifier.padding(horizontal = 24.dp)) {
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Progress", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-            Box(
-                modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(habitColor.copy(alpha = 0.12f)).padding(horizontal = 10.dp, vertical = 4.dp)
-            ) {
-                Text(habit.title, style = MaterialTheme.typography.labelSmall, color = habitColor)
-            }
-        }
-        Spacer(Modifier.height(14.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            cells.chunked(7).forEach { week ->
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    week.forEach { intensity ->
-                        Box(
-                            modifier = Modifier.size(16.dp).clip(RoundedCornerShape(3.dp))
-                                .background(if (intensity == 0f) Divider else habitColor.copy(alpha = intensity))
-                        )
+        Spacer(Modifier.height(4.dp))
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val gap = 3.dp
+            val weeks = habitWithStatus.gridAlphas.chunked(7)
+            val weekCount = weeks.size
+            if (weekCount > 0) {
+                val exactBoxSize = (maxWidth - (gap * (weekCount - 1))) / weekCount
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    weeks.forEach { week ->
+                        Column(verticalArrangement = Arrangement.spacedBy(gap)) {
+                            week.forEach { alpha ->
+                                Box(
+                                    modifier = Modifier
+                                        .size(exactBoxSize)
+                                        .clip(RoundedCornerShape(2.dp))
+                                        .background(if (alpha == 0f) Divider else habitColor.copy(alpha = alpha))
+                                )
+                            }
+                        }
                     }
                 }
             }
-        }
-        Spacer(Modifier.height(10.dp))
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("Less", style = MaterialTheme.typography.labelSmall, color = TextTertiary)
-            listOf(0.15f, 0.35f, 0.55f, 0.8f, 1f).forEach { a ->
-                Box(modifier = Modifier.size(12.dp).clip(RoundedCornerShape(2.dp)).background(habitColor.copy(alpha = a)))
-            }
-            Text("More", style = MaterialTheme.typography.labelSmall, color = TextTertiary)
         }
     }
 }
@@ -471,114 +470,145 @@ private fun HealthStatsSection(
     Column(modifier = Modifier.padding(horizontal = 24.dp)) {
         Text("Health", style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(14.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+            modifier = Modifier.height(IntrinsicSize.Max),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             // ── Water card ──────────────────────────────────────────────────
             Column(
                 modifier = Modifier
                     .weight(1f)
+                    .fillMaxHeight()
                     .clip(RoundedCornerShape(18.dp))
                     .clickable(onClick = onWaterTap)
                     .background(Surface)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    .padding(vertical = 20.dp, horizontal = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Filled.WaterDrop, contentDescription = null, tint = WaterAccent, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Filled.WaterDrop, contentDescription = null, tint = WaterAccent, modifier = Modifier.size(18.dp))
                     Text("Water", style = MaterialTheme.typography.labelLarge, color = TextTertiary)
-                    Spacer(Modifier.weight(1f))
-                    Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = TextTertiary.copy(alpha = 0.4f), modifier = Modifier.size(14.dp))
                 }
-                // Ring progress
+
+                Spacer(Modifier.height(16.dp))
+
                 Box(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.size(90.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Box(modifier = Modifier.size(80.dp), contentAlignment = Alignment.Center) {
-                        Canvas(modifier = Modifier.size(80.dp)) {
-                            val stroke = 7.dp.toPx()
-                            val inset = stroke / 2
+                    Canvas(modifier = Modifier.size(90.dp)) {
+                        val stroke = 8.dp.toPx()
+                        val inset = stroke / 2
+                        drawArc(
+                            color = WaterAccent.copy(alpha = 0.12f),
+                            startAngle = -90f, sweepAngle = 360f, useCenter = false,
+                            style = Stroke(stroke, cap = StrokeCap.Round),
+                            topLeft = androidx.compose.ui.geometry.Offset(inset, inset),
+                            size = androidx.compose.ui.geometry.Size(size.width - stroke, size.height - stroke)
+                        )
+                        if (waterFraction > 0f) {
                             drawArc(
-                                color = WaterAccent.copy(alpha = 0.12f),
-                                startAngle = -90f, sweepAngle = 360f, useCenter = false,
+                                color = WaterAccent,
+                                startAngle = -90f, sweepAngle = 360f * waterFraction, useCenter = false,
                                 style = Stroke(stroke, cap = StrokeCap.Round),
                                 topLeft = androidx.compose.ui.geometry.Offset(inset, inset),
                                 size = androidx.compose.ui.geometry.Size(size.width - stroke, size.height - stroke)
                             )
-                            if (waterFraction > 0f) {
-                                drawArc(
-                                    color = WaterAccent,
-                                    startAngle = -90f, sweepAngle = 360f * waterFraction, useCenter = false,
-                                    style = Stroke(stroke, cap = StrokeCap.Round),
-                                    topLeft = androidx.compose.ui.geometry.Offset(inset, inset),
-                                    size = androidx.compose.ui.geometry.Size(size.width - stroke, size.height - stroke)
-                                )
-                            }
-                        }
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                if (health.waterMl >= 1000) "${health.waterMl / 1000f}L" else "${health.waterMl}",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                color = WaterAccent
-                            )
-                            if (health.waterMl < 1000) Text("ml", style = MaterialTheme.typography.labelSmall, color = TextTertiary)
                         }
                     }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            if (health.waterMl >= 1000) "${health.waterMl / 1000f}L" else "${health.waterMl}",
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                            color = WaterAccent
+                        )
+                        if (health.waterMl < 1000) Text("ml", style = MaterialTheme.typography.labelSmall, color = TextTertiary)
+                    }
                 }
+
+                Spacer(Modifier.height(8.dp))
+                
                 Text(
-                    "Goal: ${health.waterGoalMl / 1000f}L • ${(health.waterFraction * 100).toInt()}%",
-                    style = MaterialTheme.typography.labelSmall,
+                    "Goal: ${health.waterGoalMl / 1000f}L",
+                    style = MaterialTheme.typography.labelMedium,
                     color = TextTertiary
                 )
-                Text(
-                    "Tap to log →",
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                    color = WaterAccent
-                )
+
+                Spacer(Modifier.height(16.dp))
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable(onClick = onWaterTap)
+                        .background(WaterAccent.copy(alpha = 0.08f))
+                        .padding(vertical = 10.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("Tap to log →", style = MaterialTheme.typography.labelMedium, color = WaterAccent, fontWeight = FontWeight.Bold)
+                }
             }
 
             // ── Weight card ─────────────────────────────────────────────────
             Column(
                 modifier = Modifier
                     .weight(1f)
+                    .fillMaxHeight()
                     .clip(RoundedCornerShape(18.dp))
                     .clickable(onClick = onWeightTap)
                     .background(Surface)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    .padding(vertical = 20.dp, horizontal = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Filled.MonitorWeight, contentDescription = null, tint = WeightAccent, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Filled.MonitorWeight, contentDescription = null, tint = WeightAccent, modifier = Modifier.size(18.dp))
                     Text("Weight", style = MaterialTheme.typography.labelLarge, color = TextTertiary)
                 }
-                Spacer(Modifier.height(10.dp))
-                if (health.weightKg != null) {
-                    Text(
-                        "%.1f".format(health.weightKg) + " kg",
-                        style = MaterialTheme.typography.titleLarge.copy(fontSize = 24.sp, fontWeight = FontWeight.Bold),
-                        color = WeightAccent
-                    )
-                    if (health.weightDelta != null) {
-                        val sign = if (health.weightDelta >= 0f) "+" else ""
-                        val deltaColor = if (health.weightDelta <= 0f) Color(0xFF5AE88A) else Color(0xFFE85A5A)
-                        Text("$sign${" %.1f".format(health.weightDelta)} vs yesterday", style = MaterialTheme.typography.labelSmall, color = deltaColor)
-                    } else {
-                        Text("Log in Settings →", style = MaterialTheme.typography.labelSmall, color = TextTertiary)
+
+                Spacer(Modifier.height(16.dp))
+                
+                Box(
+                    modifier = Modifier.size(90.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        if (health.weightKg != null) {
+                            Text(
+                                "%.1f".format(health.weightKg),
+                                style = MaterialTheme.typography.titleLarge.copy(fontSize = 28.sp, fontWeight = FontWeight.Bold),
+                                color = WeightAccent
+                            )
+                            Text("kg", style = MaterialTheme.typography.labelSmall, color = TextTertiary)
+                        } else {
+                            Text("—", style = MaterialTheme.typography.titleLarge.copy(fontSize = 32.sp), color = TextTertiary.copy(alpha = 0.3f))
+                        }
                     }
-                } else {
-                    Text("—", style = MaterialTheme.typography.titleLarge.copy(fontSize = 32.sp), color = TextTertiary.copy(alpha = 0.3f))
-                    Spacer(Modifier.height(4.dp))
-                    Text("Log in Settings →", style = MaterialTheme.typography.labelSmall, color = TextTertiary)
                 }
-                Spacer(Modifier.height(10.dp))
+
+                Spacer(Modifier.height(8.dp))
+
+                if (health.weightKg != null && health.weightDelta != null) {
+                    val sign = if (health.weightDelta >= 0f) "+" else ""
+                    val deltaColor = if (health.weightDelta <= 0f) Color(0xFF5AE88A) else Color(0xFFE85A5A)
+                    Text("$sign${"%.1f".format(health.weightDelta)} vs yesterday", style = MaterialTheme.typography.labelMedium, color = deltaColor)
+                } else {
+                    Text("Log today's weight", style = MaterialTheme.typography.labelMedium, color = TextTertiary)
+                }
+
+                Spacer(Modifier.height(16.dp))
+
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(RoundedCornerShape(12.dp))
                         .clickable(onClick = onWeightTap)
                         .background(WeightAccent.copy(alpha = 0.08f))
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                        .padding(vertical = 10.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text("Log weight →", style = MaterialTheme.typography.labelSmall, color = WeightAccent.copy(alpha = 0.8f))
+                    Text("Log weight →", style = MaterialTheme.typography.labelMedium, color = WeightAccent, fontWeight = FontWeight.Bold)
                 }
             }
         }

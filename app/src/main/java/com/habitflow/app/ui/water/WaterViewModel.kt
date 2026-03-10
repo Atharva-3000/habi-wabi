@@ -66,6 +66,13 @@ class WaterViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun removeVessel(vessel: WaterVessel) {
+        viewModelScope.launch {
+            repo.subtractWater(vessel.ml)
+            _uiState.update { it.copy(lastAddedMl = -vessel.ml, animTrigger = it.animTrigger + 1) }
+        }
+    }
+
     fun undoLast() {
         val ml = _uiState.value.lastAddedMl
         if (ml > 0) {

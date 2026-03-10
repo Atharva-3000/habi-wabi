@@ -9,4 +9,5 @@ sealed class Screen(val route: String) {
     object Settings     : Screen("settings")
     object CreateHabit  : Screen("create_habit")
     object Water        : Screen("water")
+    object WeightHistory: Screen("weight_history")
 }

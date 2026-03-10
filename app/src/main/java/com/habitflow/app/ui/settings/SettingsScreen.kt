@@ -31,7 +31,10 @@ private val WeightColor = Color(0xFF7B68EE)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
+fun SettingsScreen(
+    onNavigateToWeightHistory: () -> Unit,
+    viewModel: SettingsViewModel = viewModel()
+) {
 
     val allHabits           by viewModel.allHabits.collectAsState()
     val todayWeight         by viewModel.todayWeight.collectAsState()
@@ -40,6 +43,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
     val waterGoal           by viewModel.waterDailyGoalMl.collectAsState()
     val quietStart          by viewModel.quietHoursStart.collectAsState()
     val quietEnd            by viewModel.quietHoursEnd.collectAsState()
+    val reminderOffset      by viewModel.reminderOffsetMinutes.collectAsState()
     val snackbarHostState   = remember { SnackbarHostState() }
 
     // Habit whose reminder time we are currently editing (null = no sheet open)
@@ -150,6 +154,27 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                     Text("30-Day Trend", style = MaterialTheme.typography.titleMedium)
                     Spacer(Modifier.height(4.dp))
                     WeightLineChart(points = weightHistory, modifier = Modifier.fillMaxWidth())
+
+                    Spacer(Modifier.height(16.dp))
+                    
+                    // Button to navigate to full weight history
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(onClick = onNavigateToWeightHistory)
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Filled.History, contentDescription = null, tint = TextTertiary, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            "Check weight history",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextSecondary,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = TextTertiary, modifier = Modifier.size(18.dp))
+                    }
                 }
             }
 
@@ -225,11 +250,60 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
 
                     // Quiet hours row
                     SettingsDivider()
-                    QuietHoursRow(
-                        start = quietStart,
-                        end = quietEnd,
-                        onEdit = { s, e -> viewModel.setQuietHours(s, e) }
-                    )
+                    Box(modifier = Modifier.padding(top = 8.dp)) {
+                        QuietHoursRow(
+                            start = quietStart,
+                            end = quietEnd,
+                            onEdit = { s, e -> viewModel.setQuietHours(s, e) }
+                        )
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+
+                    // Reminder offset setting
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Surface)
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Outlined.Timer, null, tint = TextTertiary, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text("Reminder Offset", style = MaterialTheme.typography.labelLarge)
+                                Text("Nudge me early so I can prepare", style = MaterialTheme.typography.labelSmall, color = TextTertiary)
+                            }
+                        }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState())
+                                .padding(vertical = 4.dp), // Add slight padding for focus/ripple clearance
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            listOf(0, 5, 10, 15, 30).forEach { mins ->
+                                val isActive = reminderOffset == mins
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(if (isActive) GoldAccent.copy(alpha = 0.15f) else SurfaceVariant)
+                                        .border(1.dp, if (isActive) GoldAccent else Divider, RoundedCornerShape(10.dp))
+                                        .clickable { viewModel.setReminderOffset(mins) }
+                                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        if (mins == 0) "On time" else "${mins}m early",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (isActive) GoldAccent else TextTertiary
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -271,49 +345,59 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                         }
                     }
 
-                    // Water goal inline editor
+                    // Water goal inline editor & chips (only visible when editing)
                     AnimatedVisibility(visible = editWaterGoal) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(
-                                value = waterGoalInput,
-                                onValueChange = { waterGoalInput = it },
-                                label = { Text("Goal (ml)") },
-                                modifier = Modifier.weight(1f),
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                singleLine = true,
-                                colors = textFieldColors(),
-                                shape = RoundedCornerShape(12.dp)
-                            )
-                            Button(
-                                onClick = {
-                                    waterGoalInput.toIntOrNull()?.let { viewModel.setWaterGoal(it) }
-                                    editWaterGoal = false
-                                },
-                                modifier = Modifier.height(56.dp).align(Alignment.Bottom),
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = GoldAccent, contentColor = Background),
-                                enabled = waterGoalInput.toIntOrNull() != null
-                            ) { Text("Save", fontWeight = FontWeight.SemiBold) }
-                        }
-                    }
-
-                    // Quick water goal chips
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(1500, 2000, 2500, 3000).forEach { ml ->
-                            val isSelected = waterGoal == ml
-                            Box(
+                        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            // Quick water goal chips
+                            Row(
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(if (isSelected) Color(0xFF5AB8E8).copy(alpha = 0.2f) else Background)
-                                    .border(1.dp, if (isSelected) Color(0xFF5AB8E8) else Divider, RoundedCornerShape(10.dp))
-                                    .clickable { viewModel.setWaterGoal(ml) }
-                                    .padding(horizontal = 12.dp, vertical = 7.dp)
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Text(
-                                    "${ml}ml",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (isSelected) Color(0xFF5AB8E8) else TextTertiary
+                                listOf(1500, 2000, 2500, 3000).forEach { ml ->
+                                    val isSelected = waterGoalInput == ml.toString()
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(if (isSelected) Color(0xFF5AB8E8).copy(alpha = 0.2f) else Background)
+                                            .border(1.dp, if (isSelected) Color(0xFF5AB8E8) else Divider, RoundedCornerShape(10.dp))
+                                            .clickable { waterGoalInput = ml.toString() }
+                                            .padding(vertical = 10.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            "${ml}ml",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = if (isSelected) Color(0xFF5AB8E8) else TextTertiary
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Manual entry + save button
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedTextField(
+                                    value = waterGoalInput,
+                                    onValueChange = { waterGoalInput = it },
+                                    label = { Text("Custom (ml)") },
+                                    modifier = Modifier.weight(1f),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    singleLine = true,
+                                    colors = textFieldColors(),
+                                    shape = RoundedCornerShape(12.dp)
                                 )
+                                Button(
+                                    onClick = {
+                                        waterGoalInput.toIntOrNull()?.let { viewModel.setWaterGoal(it) }
+                                        editWaterGoal = false
+                                    },
+                                    modifier = Modifier.height(56.dp).align(Alignment.Bottom),
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = GoldAccent, contentColor = Background),
+                                    enabled = waterGoalInput.toIntOrNull() != null
+                                ) { Text("Save", fontWeight = FontWeight.SemiBold) }
                             }
                         }
                     }
@@ -321,6 +405,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
             }
 
             SettingsDivider()
+            Spacer(Modifier.height(16.dp)) // Push 'About' down
 
             // ─── About ────────────────────────────────────────────────────────
             SettingsSection(
@@ -330,7 +415,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     AboutRow("App",        "Habi Wabi")
-                    AboutRow("Version",    "1.0.0 · Open Source")
+                    AboutRow("Version",    "1.2.0 · Alpha Release (March 10, 2026)")
                     AboutRow("Philosophy", "Wabi-sabi · imperfect, impermanent, incomplete")
                     AboutRow("Data",       "100% on-device · Room SQLite · Auto Backup")
                     AboutRow("Privacy",    "No accounts. No tracking. Ever.")
@@ -455,7 +540,13 @@ private fun HabitReminderRow(
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun QuietHoursRow(start: String, end: String, onEdit: (String, String) -> Unit) {
-    Column(modifier = Modifier.padding(top = 4.dp)) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Surface)
+            .padding(16.dp)
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -473,7 +564,12 @@ private fun QuietHoursRow(start: String, end: String, onEdit: (String, String) -
         }
         Spacer(Modifier.height(10.dp))
         // Quick presets
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             listOf(
                 Triple("22:00", "07:00", "10pm–7am"),
                 Triple("23:00", "07:00", "11pm–7am"),
@@ -509,7 +605,7 @@ private fun ReminderTimeSheet(
     val timeState = rememberTimePickerState(
         initialHour = habit.reminderHour,
         initialMinute = habit.reminderMinute,
-        is24Hour = false
+        is24Hour = true
     )
     val habitColor = runCatching { Color(android.graphics.Color.parseColor(habit.colorHex)) }
         .getOrDefault(GoldAccent)
@@ -608,7 +704,7 @@ private fun SettingsSection(
     title: String,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)) {
+    Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 20.dp)) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -667,7 +763,5 @@ private fun textFieldColors() = OutlinedTextFieldDefaults.colors(
 )
 
 private fun formatTime(hour: Int, minute: Int): String {
-    val h12  = if (hour % 12 == 0) 12 else hour % 12
-    val ampm = if (hour < 12) "AM" else "PM"
-    return "%d:%02d %s daily".format(h12, minute, ampm)
+    return "%02d:%02d".format(hour, minute)
 }

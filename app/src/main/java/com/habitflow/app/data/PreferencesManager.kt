@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -23,6 +24,10 @@ class PreferencesManager(private val context: Context) {
         val WATER_DAILY_GOAL_ML        = stringPreferencesKey("water_daily_goal_ml")
         val QUIET_HOURS_START          = stringPreferencesKey("quiet_hours_start") // "HH:mm"
         val QUIET_HOURS_END            = stringPreferencesKey("quiet_hours_end")
+        val REMINDER_OFFSET_MINUTES    = intPreferencesKey("reminder_offset_minutes")
+        // Notification tracking
+        val WELCOME_NOTIF_SENT         = booleanPreferencesKey("welcome_notif_sent")
+        val UNREAD_NOTIF_COUNT         = intPreferencesKey("unread_notif_count")
     }
 
     val onboardingComplete: Flow<Boolean> = context.dataStore.data
@@ -42,6 +47,15 @@ class PreferencesManager(private val context: Context) {
 
     val quietHoursEnd: Flow<String> = context.dataStore.data
         .map { it[QUIET_HOURS_END] ?: "07:00" }
+
+    val reminderOffsetMinutes: Flow<Int> = context.dataStore.data
+        .map { it[REMINDER_OFFSET_MINUTES] ?: 0 }
+
+    val welcomeNotifSent: Flow<Boolean> = context.dataStore.data
+        .map { it[WELCOME_NOTIF_SENT] ?: false }
+
+    val unreadNotifCount: Flow<Int> = context.dataStore.data
+        .map { it[UNREAD_NOTIF_COUNT] ?: 0 }
 
     suspend fun setOnboardingComplete(complete: Boolean) {
         context.dataStore.edit { it[ONBOARDING_COMPLETE] = complete }
@@ -66,10 +80,29 @@ class PreferencesManager(private val context: Context) {
         }
     }
 
+    suspend fun setReminderOffsetMinutes(minutes: Int) {
+        context.dataStore.edit { it[REMINDER_OFFSET_MINUTES] = minutes }
+    }
+
     suspend fun setLastQuoteInfo(date: String, index: Int) {
         context.dataStore.edit {
             it[LAST_QUOTE_DATE] = date
             it[LAST_QUOTE_INDEX] = index.toString()
+        }
+    }
+
+    suspend fun setWelcomeNotifSent(sent: Boolean) {
+        context.dataStore.edit { it[WELCOME_NOTIF_SENT] = sent }
+    }
+
+    suspend fun setUnreadNotifCount(count: Int) {
+        context.dataStore.edit { it[UNREAD_NOTIF_COUNT] = count }
+    }
+
+    suspend fun incrementUnreadNotifCount() {
+        val current = context.dataStore.data.map { it[UNREAD_NOTIF_COUNT] ?: 0 }
+        context.dataStore.edit { prefs ->
+            prefs[UNREAD_NOTIF_COUNT] = (prefs[UNREAD_NOTIF_COUNT] ?: 0) + 1
         }
     }
 

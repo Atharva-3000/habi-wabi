@@ -18,7 +18,8 @@ data class HabitWithStatus(
     val habit: Habit,
     val isDoneToday: Boolean,
     val streak: Int,
-    val last7Days: List<Boolean>   // oldest→newest, index 6 = today
+    val last7Days: List<Boolean> = emptyList(),   // oldest→newest, index 6 = today
+    val gridAlphas: List<Float> = emptyList()
 )
 
 data class HealthSnapshot(
@@ -35,6 +36,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repo: HabitRepository = (application as HabiWabiApp).habitRepository
     private val healthRepo: HealthRepository = (application as HabiWabiApp).healthRepository
+    private val prefsManager = com.habitflow.app.data.PreferencesManager(application)
 
     private val dateFormatter = DateTimeFormatter.ISO_LOCAL_DATE
     private val today = LocalDate.now()
@@ -46,18 +48,30 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             .flatMapLatest { habits ->
                 if (habits.isEmpty()) return@flatMapLatest flowOf(emptyList())
                 val streams = habits.map { habit ->
-                    val start = today.minusDays(6)
+                    // Fetch 112 days for 16 weeks of grid history
+                    val start = today.minusDays(111)
                     repo.getLogsFromDate(habit.id, start).map { logs ->
                         val logsByDate = logs.associateBy { it.date }
-                        val last7 = (0..6).map { offset ->
+                        val doneSet = logs.filter { it.isDone }.map { it.date }.toSet()
+                        
+                        // Extract just the last 7 days from the 112 days retrieved
+                        val last7 = (105..111).map { offset ->
                             val d = start.plusDays(offset.toLong()).format(dateFormatter)
                             logsByDate[d]?.isDone == true
                         }
+                        
+                        // Computes 112 days grid alphas (offset 0 is oldest, 111 is today)
+                        val alphas = (0..111).map { offset ->
+                            val d = start.plusDays(offset.toLong()).format(dateFormatter)
+                            if (doneSet.contains(d)) 1f else 0f
+                        }
+
                         HabitWithStatus(
                             habit = habit,
                             isDoneToday = logsByDate[todayStr]?.isDone == true,
                             streak = computeStreak(logs),
-                            last7Days = last7
+                            last7Days = last7,
+                            gridAlphas = alphas
                         )
                     }
                 }
@@ -81,6 +95,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HealthSnapshot())
+
+    /** Unread notification count for red dot badge */
+    val unreadNotifCount: StateFlow<Int> = prefsManager.unreadNotifCount
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
+    fun clearNotifications() {
+        viewModelScope.launch { prefsManager.setUnreadNotifCount(0) }
+    }
 
     fun toggleHabit(habitId: Long) {
         viewModelScope.launch { repo.toggleHabitDone(habitId) }

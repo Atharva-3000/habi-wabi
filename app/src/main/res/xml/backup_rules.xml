@@ -11,7 +11,4 @@
     <include domain="database" path="habiwabi.db-wal" />
     <!-- Include DataStore preferences -->
     <include domain="file" path="datastore/" />
-    <!-- Exclude cache -->
-    <exclude domain="cache" path="." />
-    <exclude domain="external-cache" path="." />
 </full-backup-content>

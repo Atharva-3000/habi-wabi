@@ -15,7 +15,8 @@ class HabiWabiApp : Application() {
         HabitRepository(database.habitDao(), database.habitLogDao())
     }
     val todoRepository by lazy { TodoRepository(database.todoDao()) }
-    val healthRepository by lazy { HealthRepository(database.healthDao()) }
+    val healthRepository by lazy { HealthRepository(database.healthDao(), database.weightLogDao()) }
+
 
     override fun onCreate() {
         super.onCreate()

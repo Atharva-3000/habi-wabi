@@ -12,12 +12,20 @@ import com.habitflow.app.data.model.Habit
 import com.habitflow.app.data.model.HabitFrequency
 import com.habitflow.app.data.model.HabitType
 import com.habitflow.app.data.repository.HabitRepository
+import com.habitflow.app.data.PreferencesManager
 import com.habitflow.app.notifications.NotificationHelper
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class CreateHabitViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repo: HabitRepository = (application as HabiWabiApp).habitRepository
+    private val prefs = PreferencesManager(application)
+
+    val reminderOffsetMinutes: StateFlow<Int> = prefs.reminderOffsetMinutes
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     // ── Form state ────────────────────────────────────────────────────────────
     var habitName by mutableStateOf("")

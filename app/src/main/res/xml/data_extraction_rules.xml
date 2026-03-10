@@ -9,7 +9,6 @@
         <include domain="database" path="habiwabi.db-shm" />
         <include domain="database" path="habiwabi.db-wal" />
         <include domain="file" path="datastore/" />
-        <exclude domain="cache" path="." />
     </cloud-backup>
     <device-transfer>
         <include domain="database" path="habiwabi.db" />

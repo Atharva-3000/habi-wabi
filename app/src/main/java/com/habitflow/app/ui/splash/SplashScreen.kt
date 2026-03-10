@@ -1,6 +1,7 @@
 package com.habitflow.app.ui.splash
 
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
@@ -9,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -17,20 +19,25 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import com.habitflow.app.R
 import com.habitflow.app.ui.theme.*
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
- * Splash screen with a three-part reveal animation:
- *  1. 0–400ms   — background fades in (already same color so seamless)
- *  2. 200–700ms — two golden arcs (forming an incomplete enso circle) draw in
+ * Splash screen with a four-part reveal animation:
+ *  1. 0–600ms  — two golden arcs (forming an incomplete enso circle) draw in
+ *  2. 300–700ms — logo fades in inside the center of the arc loop
  *  3. 600–900ms — wordmark "habi wabi" fades + scales up from 0.85
- *  4. 1400ms    — onComplete fires → nav to Onboarding or Home
+ *  4. 1500ms   — onComplete fires → nav to Onboarding or Home
  */
 @Composable
 fun SplashScreen(onComplete: () -> Unit) {
-    // Arc draw progress: 0 → 1 over 500ms, easing out
+    // Arc draw progress: 0 → 1 over 600ms
     val arcAnim = remember { Animatable(0f) }
+    // Logo reveal (inside the loop)
+    val logoAlpha = remember { Animatable(0f) }
+    val logoScale = remember { Animatable(0.7f) }
     // Wordmark fade: 0 → 1
     val textAlpha = remember { Animatable(0f) }
     val textScale = remember { Animatable(0.85f) }
@@ -40,14 +47,21 @@ fun SplashScreen(onComplete: () -> Unit) {
     LaunchedEffect(Unit) {
         // Arc draws in
         arcAnim.animateTo(1f, tween(600, 0, EaseOutCubic))
-        // Wordmark appears
-        delay(80)
-        textAlpha.animateTo(1f, tween(400, easing = EaseOutCubic))
-        textScale.animateTo(1f, tween(400, easing = EaseOutCubic))
+        // Logo reveals inside the circle as arc completes
+        launch {
+            logoAlpha.animateTo(1f, tween(450, easing = EaseOutCubic))
+        }
+        launch {
+            logoScale.animateTo(1f, tween(450, easing = EaseOutBack))
+        }
+        // Wordmark appears slightly after logo
+        delay(120)
+        launch { textAlpha.animateTo(1f, tween(400, easing = EaseOutCubic)) }
+        launch { textScale.animateTo(1f, tween(400, easing = EaseOutCubic)) }
         // Dot sparkle
         dotAnim.animateTo(1f, tween(300, easing = EaseOutCubic))
         // Hold
-        delay(600)
+        delay(700)
         onComplete()
     }
 
@@ -61,11 +75,21 @@ fun SplashScreen(onComplete: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            // ── Enso arc ring ────────────────────────────────────────────────
+            // ── Enso arc ring + Logo ───────────────────────────────────────────
             Box(modifier = Modifier.size(120.dp), contentAlignment = Alignment.Center) {
+                // Arc drawn on canvas
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     drawEnso(arcProgress = arcAnim.value)
                 }
+                // Logo revealed inside the loop
+                Image(
+                    painter = painterResource(id = R.drawable.logo_splash),
+                    contentDescription = "Habi Wabi Logo",
+                    modifier = Modifier
+                        .size(72.dp)
+                        .alpha(logoAlpha.value)
+                        .scale(logoScale.value)
+                )
             }
 
             // ── Wordmark ─────────────────────────────────────────────────────

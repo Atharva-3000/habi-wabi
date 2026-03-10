@@ -13,5 +13,6 @@ data class Todo(
     val date: String,                          // ISO date
     val frequency: TodoFrequency = TodoFrequency.ONCE,
     val isDone: Boolean = false,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val reminderTime: String? = null           // "HH:mm" or null
 )

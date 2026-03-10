@@ -1,70 +1,74 @@
 package com.habitflow.app.ui.todo
 
-import androidx.compose.animation.*
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.Spring
-import androidx.compose.foundation.*
+import android.app.TimePickerDialog
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.border
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.outlined.Event
+import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.habitflow.app.data.model.Todo
 import com.habitflow.app.ui.theme.*
+import java.time.Instant
 import java.time.LocalDate
-
-private val categoryColors = mapOf(
-    "Personal"  to Color(0xFF7B68EE),
-    "Work"      to Color(0xFF5A9FE8),
-    "Health"    to Color(0xFF5AE88A),
-    "Finance"   to Color(0xFFC9A96E),
-    "Learning"  to Color(0xFFE85AB0),
-    "Creative"  to Color(0xFFE8935A),
-)
+import java.time.LocalTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TodoScreen(viewModel: TodoViewModel = viewModel()) {
-    val groups by viewModel.groups.collectAsState()
-    val filter by viewModel.filter.collectAsState()
-    val totalActive by viewModel.totalActive.collectAsState()
+fun TodoScreen(
+    appViewModel: TodoViewModel = viewModel(),
+    onNavigateHome: () -> Unit = {}
+) {
+    val filter by appViewModel.filter.collectAsState()
+    val groups by appViewModel.groups.collectAsState()
+    val totalActive by appViewModel.totalActive.collectAsState()
+
     var showAddSheet by remember { mutableStateOf(false) }
-    val snackbarHostState = remember { SnackbarHostState() }
+    var editingTodo by remember { mutableStateOf<Todo?>(null) }
+    val haptic = LocalHapticFeedback.current
 
     Scaffold(
         containerColor = Background,
-        snackbarHost = {
-            SnackbarHost(snackbarHostState) { data ->
-                Snackbar(
-                    snackbarData = data,
-                    containerColor = SurfaceVariant,
-                    contentColor = TextPrimary,
-                    actionColor = GoldAccent,
-                    shape = RoundedCornerShape(12.dp)
-                )
-            }
-        },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { showAddSheet = true },
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    editingTodo = null
+                    showAddSheet = true
+                },
                 containerColor = GoldAccent,
-                contentColor = Background,
-                shape = RoundedCornerShape(16.dp)
+                contentColor = Color.White, // pure white plus icon
+                shape = CircleShape
             ) {
                 Icon(Icons.Filled.Add, contentDescription = "Add Task")
             }
@@ -74,295 +78,260 @@ fun TodoScreen(viewModel: TodoViewModel = viewModel()) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .background(Background)
-                .statusBarsPadding()
         ) {
-            // ── Header ──────────────────────────────────────────────────────
-            Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 20.dp)) {
-                Text(
-                    "habi wabi",
-                    style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 4.sp, fontWeight = FontWeight.Light),
-                    color = TextTertiary.copy(alpha = 0.6f)
-                )
-                Spacer(Modifier.height(4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Tasks", style = MaterialTheme.typography.displayLarge, modifier = Modifier.weight(1f))
-                    AnimatedVisibility(visible = totalActive > 0) {
-                        Box(
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .background(GoldAccent)
-                                .padding(horizontal = 10.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                "$totalActive",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = Background,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
+            TodoHeader(
+                activeCount = totalActive,
+                currentFilter = filter,
+                onFilterChanged = appViewModel::setFilter
+            )
+
+            if (groups.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("✦", color = GoldAccent, fontSize = 48.sp)
+                        Spacer(Modifier.height(16.dp))
+                        Text(
+                            "Your mind is clear.",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = TextSecondary
+                        )
+                        Text(
+                            "Tap + to add a new task",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextTertiary,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
                     }
                 }
-            }
-
-            // ── Filter chips ─────────────────────────────────────────────────
-            Row(
-                modifier = Modifier
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 24.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                TodoFilter.values().forEach { f ->
-                    FilterChip(
-                        selected = filter == f,
-                        onClick = { viewModel.setFilter(f) },
-                        label = { Text(f.name.lowercase().replaceFirstChar { it.uppercase() }) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = GoldAccent,
-                            selectedLabelColor = Background,
-                            containerColor = SurfaceVariant,
-                            labelColor = TextTertiary
-                        ),
-                        border = FilterChipDefaults.filterChipBorder(
-                            enabled = true,
-                            selected = filter == f,
-                            selectedBorderColor = GoldAccent,
-                            borderColor = Divider
-                        )
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(8.dp))
-
-            // ── Content ──────────────────────────────────────────────────────
-            if (groups.isEmpty()) {
-                TodoEmptyState(filter = filter, onAdd = { showAddSheet = true })
             } else {
                 LazyColumn(
-                    contentPadding = PaddingValues(horizontal = 24.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    contentPadding = PaddingValues(top = 16.dp, bottom = 100.dp),
+                    verticalArrangement = Arrangement.spacedBy(24.dp)
                 ) {
                     groups.forEach { group ->
-                        item(key = "header_${group.dateKey}") {
-                            TodoGroupHeader(label = group.label, count = group.todos.count { !it.isDone })
-                        }
-                        items(group.todos, key = { it.id }) { todo ->
-                            TodoItem(
-                                todo = todo,
-                                onToggle = { viewModel.toggleTodo(todo) },
-                                onDelete = {
-                                    viewModel.deleteTodo(todo)
+                        item(key = group.dateKey) {
+                            Column(Modifier.padding(horizontal = 24.dp)) {
+                                Text(
+                                    group.label,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = TextSecondary,
+                                    modifier = Modifier.padding(bottom = 12.dp)
+                                )
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    group.todos.forEach { todo ->
+                                        TodoItem(
+                                            todo = todo,
+                                            onToggle = {
+                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                appViewModel.toggleTodo(it)
+                                            },
+                                            onEdit = {
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                editingTodo = it
+                                                showAddSheet = true
+                                            }
+                                        )
+                                    }
                                 }
-                            )
+                            }
                         }
-                        item(key = "spacer_${group.dateKey}") { Spacer(Modifier.height(12.dp)) }
                     }
-                    item { Spacer(Modifier.height(80.dp)) }
                 }
             }
         }
     }
 
-    // ── Add Task bottom sheet ─────────────────────────────────────────────────
     if (showAddSheet) {
         AddTodoSheet(
-            onDismiss = { showAddSheet = false },
-            onAdd = { title, date, category ->
-                viewModel.addTodo(title, date, category)
+            existingTodo = editingTodo,
+            onDismiss = {
                 showAddSheet = false
+                editingTodo = null
+            },
+            onSave = { title, date, category, reminderTime ->
+                if (editingTodo != null) {
+                    appViewModel.updateTodo(
+                        editingTodo!!.copy(
+                            title = title,
+                            date = date.format(DateTimeFormatter.ISO_LOCAL_DATE),
+                            categoryLabel = category,
+                            reminderTime = reminderTime
+                        )
+                    )
+                } else {
+                    appViewModel.addTodo(title, date, category, reminderTime)
+                }
+                showAddSheet = false
+                editingTodo = null
             }
         )
-    }
-}
-
-@Composable
-private fun TodoGroupHeader(label: String, count: Int) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.titleMedium,
-            color = if (label == "Today") GoldAccent else TextSecondary
-        )
-        if (count > 0) {
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(Divider)
-                    .padding(horizontal = 7.dp, vertical = 2.dp)
-            ) {
-                Text("$count", style = MaterialTheme.typography.labelSmall, color = TextTertiary)
-            }
-        }
-        HorizontalDivider(modifier = Modifier.weight(1f), color = Divider, thickness = 0.5.dp)
-    }
-}
-
-@Composable
-private fun TodoItem(todo: Todo, onToggle: () -> Unit, onDelete: () -> Unit) {
-    val catColor = categoryColors[todo.categoryLabel] ?: GoldAccent
-
-    // Animate check
-    var checkScale by remember { mutableFloatStateOf(1f) }
-    val animCheck by animateFloatAsState(
-        targetValue = checkScale,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
-        label = "check_anim"
-    )
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(Surface)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        // Animated circular checkbox
-        Box(
-            modifier = Modifier
-                .size(24.dp)
-                .scale(animCheck)
-                .clip(CircleShape)
-                .background(if (todo.isDone) GoldAccent else Color.Transparent)
-                .border(2.dp, if (todo.isDone) GoldAccent else Divider, CircleShape)
-                .clickable {
-                    checkScale = 1.3f
-                    onToggle()
-                },
-            contentAlignment = Alignment.Center
-        ) {
-            LaunchedEffect(checkScale) {
-                if (checkScale > 1f) {
-                    kotlinx.coroutines.delay(120)
-                    checkScale = 1f
-                }
-            }
-            if (todo.isDone) {
-                Icon(
-                    Icons.Filled.Check,
-                    contentDescription = null,
-                    tint = Background,
-                    modifier = Modifier.size(13.dp)
-                )
-            }
-        }
-
-        // Content
-        Column(Modifier.weight(1f)) {
-            Text(
-                todo.title,
-                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                color = if (todo.isDone) TextTertiary else TextPrimary,
-                textDecoration = if (todo.isDone) TextDecoration.LineThrough else TextDecoration.None,
-                maxLines = 2
-            )
-            Spacer(Modifier.height(3.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(6.dp)
-                        .clip(CircleShape)
-                        .background(catColor.copy(alpha = 0.7f))
-                )
-                Text(
-                    todo.categoryLabel,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = TextTertiary
-                )
-            }
-        }
-
-        IconButton(
-            onClick = onDelete,
-            modifier = Modifier.size(28.dp)
-        ) {
-            Icon(
-                Icons.Filled.Close,
-                contentDescription = "Delete",
-                tint = TextTertiary.copy(alpha = 0.5f),
-                modifier = Modifier.size(16.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun TodoEmptyState(filter: TodoFilter, onAdd: () -> Unit) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.padding(40.dp)
-        ) {
-            Text("○", fontSize = 48.sp, color = TextTertiary.copy(alpha = 0.2f))
-            Text(
-                when (filter) {
-                    TodoFilter.DONE   -> "Nothing completed yet"
-                    TodoFilter.ACTIVE -> "All done! 🎉"
-                    TodoFilter.ALL    -> "No tasks yet"
-                },
-                style = MaterialTheme.typography.titleLarge
-            )
-            Text(
-                "One task at a time. One day at a time.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = TextTertiary
-            )
-            if (filter == TodoFilter.ALL) {
-                Spacer(Modifier.height(8.dp))
-                Button(
-                    onClick = onAdd,
-                    colors = ButtonDefaults.buttonColors(containerColor = GoldAccent, contentColor = Background),
-                    shape = RoundedCornerShape(14.dp)
-                ) {
-                    Icon(Icons.Filled.Add, null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Add a Task", fontWeight = FontWeight.SemiBold)
-                }
-            }
-        }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AddTodoSheet(
-    onDismiss: () -> Unit,
-    onAdd: (String, LocalDate, String) -> Unit
+private fun TodoHeader(
+    activeCount: Int,
+    currentFilter: TodoFilter,
+    onFilterChanged: (TodoFilter) -> Unit
 ) {
-    var title by remember { mutableStateOf("") }
-    var selectedDate by remember { mutableStateOf(LocalDate.now()) }
-    var selectedCategory by remember { mutableStateOf("Personal") }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Background)
+            .padding(top = 48.dp, bottom = 16.dp, start = 24.dp, end = 24.dp)
+    ) {
+        Text("Tasks", style = MaterialTheme.typography.displayMedium)
+        Spacer(Modifier.height(4.dp))
+        Text("$activeCount active tasks", style = MaterialTheme.typography.bodyLarge, color = TextTertiary)
 
-    val categories = categoryColors.keys.toList()
+        Spacer(Modifier.height(24.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            TodoFilter.entries.forEach { f ->
+                val selected = f == currentFilter
+                FilterChip(
+                    selected = selected,
+                    onClick = { onFilterChanged(f) },
+                    label = { Text(f.name.lowercase().replaceFirstChar { it.uppercase() }) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        containerColor = SurfaceVariant,
+                        labelColor = TextSecondary,
+                        selectedContainerColor = GoldAccent,
+                        selectedLabelColor = Color.White // Fix contrast
+                    ),
+                    border = null,
+                    shape = RoundedCornerShape(12.dp)
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun TodoItem(todo: Todo, onToggle: (Todo) -> Unit, onEdit: (Todo) -> Unit) {
+    val isDone = todo.isDone
+    val bgColor by animateColorAsState(targetValue = if (isDone) SurfaceVariant.copy(alpha = 0.5f) else Surface, label = "bg")
+    val alphaAnim by animateDpAsState(targetValue = if (isDone) 0.5.dp else 1.dp, label = "alpha")
+    val cardAlpha = alphaAnim.value
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(bgColor)
+            .combinedClickable(
+                onClick = { onToggle(todo) },
+                onLongClick = { onEdit(todo) }
+            )
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        val checkColor = if (isDone) GoldAccent else Divider
+        val internalColor = if (isDone) GoldAccent else Color.Transparent
+
+        Box(
+            modifier = Modifier
+                .size(24.dp)
+                .clip(CircleShape)
+                .background(internalColor)
+                .border(2.dp, checkColor, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            if (isDone) {
+                Icon(Icons.Filled.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+            }
+        }
+
+        Spacer(Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+            Text(
+                text = todo.title,
+                style = MaterialTheme.typography.bodyLarge.copy(
+                    textDecoration = if (isDone) TextDecoration.LineThrough else TextDecoration.None
+                ),
+                color = if (isDone) TextTertiary else TextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(Modifier.height(4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(todo.categoryLabel, style = MaterialTheme.typography.labelSmall, color = TextTertiary)
+                if (todo.reminderTime != null) {
+                    Spacer(Modifier.width(8.dp))
+                    Icon(Icons.Filled.NotificationsActive, contentDescription = "Reminder", tint = GoldAccent, modifier = Modifier.size(12.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(todo.reminderTime, style = MaterialTheme.typography.labelSmall, color = GoldAccent)
+                }
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADD/EDIT TASK SHEET
+// ─────────────────────────────────────────────────────────────────────────────
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddTodoSheet(
+    existingTodo: Todo? = null,
+    onDismiss: () -> Unit,
+    onSave: (title: String, date: LocalDate, category: String, reminderTime: String?) -> Unit
+) {
+    val today = LocalDate.now()
+    var title by remember { mutableStateOf(existingTodo?.title ?: "") }
+    
+    // Custom properties
+    var customCategories by remember { mutableStateOf(listOf("Personal", "Work", "Health", "Errands")) }
+    var selectedCategory by remember { mutableStateOf(existingTodo?.categoryLabel ?: "Personal") }
+    
+    // Date parsing for edit mode
+    var selectedDate by remember { 
+        mutableStateOf(
+            existingTodo?.let { LocalDate.parse(it.date, DateTimeFormatter.ISO_LOCAL_DATE) } ?: today
+        ) 
+    }
+    
+    // Time reminders
+    var reminderTime by remember { mutableStateOf<String?>(existingTodo?.reminderTime) }
+    var showTimePickerSheet by remember { mutableStateOf(false) }
+    var tempHour by remember { mutableIntStateOf(12) }
+    var tempMinute by remember { mutableIntStateOf(0) }
+    
+    val reminderTimeParts = reminderTime?.split(":")?.mapNotNull { it.toIntOrNull() }
+    if (reminderTimeParts?.size == 2) {
+        tempHour = reminderTimeParts[0]
+        tempMinute = reminderTimeParts[1]
+    }
+
+    val context = LocalContext.current
+
+    // Dialog flags
+    var showDatePicker by remember { mutableStateOf(false) }
+    var showNewCategoryDialog by remember { mutableStateOf(false) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = Surface,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        dragHandle = { BottomSheetDefaults.DragHandle() }
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp)
-                .padding(bottom = 40.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .imePadding()
+                .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            Text("New Task", style = MaterialTheme.typography.titleLarge)
+            Text(if (existingTodo != null) "Edit Task" else "New Task", style = MaterialTheme.typography.titleLarge)
 
             OutlinedTextField(
                 value = title,
                 onValueChange = { title = it },
                 placeholder = { Text("What needs to be done?", color = TextDisabled) },
                 modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = GoldAccent,
                     unfocusedBorderColor = Divider,
@@ -372,76 +341,241 @@ private fun AddTodoSheet(
                     focusedTextColor = TextPrimary,
                     unfocusedTextColor = TextPrimary
                 ),
-                shape = RoundedCornerShape(12.dp),
-                singleLine = true
+                shape = RoundedCornerShape(12.dp)
             )
 
-            // Date quick-select
-            Column {
-                Text("When", style = MaterialTheme.typography.labelLarge, color = TextTertiary)
-                Spacer(Modifier.height(8.dp))
+            // Date picker row
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("When", style = MaterialTheme.typography.labelMedium, color = TextTertiary)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("Today" to LocalDate.now(), "Tomorrow" to LocalDate.now().plusDays(1)).forEach { (label, date) ->
-                        val selected = selectedDate == date
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(if (selected) GoldAccent else SurfaceVariant)
-                                .border(1.dp, if (selected) GoldAccent else Divider, RoundedCornerShape(10.dp))
-                                .clickable { selectedDate = date }
-                                .padding(horizontal = 16.dp, vertical = 8.dp)
-                        ) {
-                            Text(
-                                label,
-                                style = MaterialTheme.typography.labelLarge,
-                                color = if (selected) Background else TextSecondary
-                            )
-                        }
-                    }
+                    val isToday = selectedDate == today
+                    val isTomorrow = selectedDate == today.plusDays(1)
+                    val isCustom = !isToday && !isTomorrow
+
+                    DateChip("Today", isToday) { selectedDate = today }
+                    DateChip("Tomorrow", isTomorrow) { selectedDate = today.plusDays(1) }
+                    
+                    val customLabel = if (isCustom) {
+                        selectedDate.format(DateTimeFormatter.ofPattern("MMM d"))
+                    } else "Custom"
+                    
+                    DateChip(
+                        label = customLabel, 
+                        selected = isCustom, 
+                        icon = Icons.Outlined.Event
+                    ) { showDatePicker = true }
                 }
             }
+            
+            // Reminder row
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable { 
+                        if (reminderTime == null) showTimePickerSheet = true 
+                        else reminderTime = null
+                    }
+                    .background(if (reminderTime != null) GoldAccent.copy(alpha = 0.1f) else SurfaceVariant)
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+            ) {
+                Icon(
+                    if (reminderTime != null) Icons.Filled.NotificationsActive else Icons.Outlined.NotificationsNone,
+                    contentDescription = null,
+                    tint = if (reminderTime != null) GoldAccent else TextTertiary,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    if (reminderTime != null) "Remind me at $reminderTime" else "Add reminder",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (reminderTime != null) GoldAccent else TextPrimary
+                )
+            }
 
-            // Category
-            Column {
-                Text("Category", style = MaterialTheme.typography.labelLarge, color = TextTertiary)
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    categories.forEach { cat ->
-                        val isSelected = selectedCategory == cat
-                        val color = categoryColors[cat] ?: GoldAccent
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(if (isSelected) color.copy(alpha = 0.2f) else SurfaceVariant)
-                                .border(1.dp, if (isSelected) color else Divider, RoundedCornerShape(10.dp))
-                                .clickable { selectedCategory = cat }
-                                .padding(horizontal = 12.dp, vertical = 7.dp)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(5.dp)
-                            ) {
-                                Box(Modifier.size(6.dp).clip(CircleShape).background(color))
-                                Text(
-                                    cat,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (isSelected) color else TextTertiary
-                                )
-                            }
-                        }
+            // Categories row (Fixed wrapping with LazyRow)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Category", style = MaterialTheme.typography.labelMedium, color = TextTertiary)
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(customCategories) { cat ->
+                        CategoryChip(
+                            label = cat,
+                            selected = cat == selectedCategory,
+                            onClick = { selectedCategory = cat }
+                        )
+                    }
+                    item {
+                        CategoryChip(
+                            label = "+ New",
+                            selected = false,
+                            onClick = { showNewCategoryDialog = true },
+                            isAddBtn = true
+                        )
                     }
                 }
             }
 
             Button(
-                onClick = { if (title.isNotBlank()) onAdd(title, selectedDate, selectedCategory) },
+                onClick = { onSave(title, selectedDate, selectedCategory, reminderTime) },
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = GoldAccent, contentColor = Background),
+                colors = ButtonDefaults.buttonColors(containerColor = GoldAccent, contentColor = Color.White),
                 enabled = title.isNotBlank()
             ) {
-                Text("Add Task", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                Text("Save Task", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
             }
         }
+    }
+
+    // Material 3 Custom DatePicker Dialog
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = selectedDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let { millis ->
+                        selectedDate = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate()
+                    }
+                    showDatePicker = false
+                }) { Text("OK", color = GoldAccent) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("Cancel", color = TextTertiary) }
+            },
+            colors = DatePickerDefaults.colors(containerColor = Surface)
+        ) {
+            DatePicker(
+                state = datePickerState,
+                colors = DatePickerDefaults.colors(
+                    selectedDayContainerColor = GoldAccent,
+                    selectedDayContentColor = Color.White,
+                    todayDateBorderColor = GoldAccent,
+                    todayContentColor = GoldAccent,
+                    titleContentColor = GoldAccent
+                )
+            )
+        }
+    }
+
+    // Material 3 TimePicker Dialog
+    if (showTimePickerSheet) {
+        val timeState = rememberTimePickerState(initialHour = tempHour, initialMinute = tempMinute, is24Hour = true)
+        
+        AlertDialog(
+            onDismissRequest = { showTimePickerSheet = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    reminderTime = String.format("%02d:%02d", timeState.hour, timeState.minute)
+                    showTimePickerSheet = false
+                }) { Text("OK", color = GoldAccent) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTimePickerSheet = false }) { Text("Cancel", color = TextTertiary) }
+            },
+            containerColor = Surface,
+            title = { Text("Select Time", style = MaterialTheme.typography.titleMedium) },
+            text = {
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    TimePicker(
+                        state = timeState,
+                        colors = TimePickerDefaults.colors(
+                            clockDialColor = SurfaceVariant,
+                            selectorColor = GoldAccent,
+                            clockDialSelectedContentColor = Background,
+                            clockDialUnselectedContentColor = TextPrimary
+                        )
+                    )
+                }
+            }
+        )
+    }
+
+    // New Category Dialog
+    if (showNewCategoryDialog) {
+        var newCatName by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showNewCategoryDialog = false },
+            containerColor = Surface,
+            title = { Text("New Category", style = MaterialTheme.typography.titleMedium) },
+            text = {
+                OutlinedTextField(
+                    value = newCatName,
+                    onValueChange = { newCatName = it },
+                    placeholder = { Text("E.g., Groceries") },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = GoldAccent)
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (newCatName.isNotBlank() && !customCategories.contains(newCatName)) {
+                            customCategories = customCategories + newCatName
+                            selectedCategory = newCatName
+                        }
+                        showNewCategoryDialog = false
+                    }
+                ) { Text("Add", color = GoldAccent) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNewCategoryDialog = false }) { Text("Cancel", color = TextTertiary) }
+            }
+        )
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CHIPS
+// ─────────────────────────────────────────────────────────────────────────────
+@Composable
+private fun DateChip(
+    label: String, 
+    selected: Boolean, 
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    onClick: () -> Unit
+) {
+    val bg = if (selected) GoldAccent else SurfaceVariant
+    val tc = if (selected) Color.White else TextSecondary
+
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(bg)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (icon != null) {
+                Icon(icon, contentDescription = null, tint = tc, modifier = Modifier.size(14.dp))
+            }
+            Text(label, color = tc, style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}
+
+@Composable
+private fun CategoryChip(label: String, selected: Boolean, onClick: () -> Unit, isAddBtn: Boolean = false) {
+    val bg = if (selected) GoldAccent.copy(alpha = 0.15f) else if (isAddBtn) Color.Transparent else SurfaceVariant
+    val borderCol = if (selected) GoldAccent else if (isAddBtn) Divider else Color.Transparent
+    val tc = if (selected) GoldAccent else TextSecondary
+
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(bg)
+            .border(1.dp, borderCol, RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(label, color = tc, style = MaterialTheme.typography.bodyMedium)
     }
 }

@@ -65,6 +65,7 @@ fun CreateHabitScreen(
 ) {
     var showReminderSheet by remember { mutableStateOf(false) }
     var advancedExpanded by remember { mutableStateOf(false) }
+    val reminderOffset by viewModel.reminderOffsetMinutes.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(viewModel.saveSuccess) {
@@ -261,6 +262,7 @@ fun CreateHabitScreen(
             reminderEnabled = viewModel.reminderEnabled,
             reminderHour = viewModel.reminderHour,
             reminderMinute = viewModel.reminderMinute,
+            reminderOffset = reminderOffset,
             onDismiss = { showReminderSheet = false },
             onSkip = {
                 showReminderSheet = false
@@ -441,6 +443,7 @@ private fun ReminderSheet(
     reminderEnabled: Boolean,
     reminderHour: Int,
     reminderMinute: Int,
+    reminderOffset: Int,
     onDismiss: () -> Unit,
     onSkip: () -> Unit,
     onSaveWithReminder: (hour: Int, minute: Int) -> Unit
@@ -448,7 +451,7 @@ private fun ReminderSheet(
     var wantReminder by remember { mutableStateOf(reminderEnabled) }
     var hour by remember { mutableIntStateOf(reminderHour) }
     var minute by remember { mutableIntStateOf(reminderMinute) }
-    val timeState = rememberTimePickerState(initialHour = hour, initialMinute = minute, is24Hour = false)
+    val timeState = rememberTimePickerState(initialHour = hour, initialMinute = minute, is24Hour = true)
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -527,8 +530,9 @@ private fun ReminderSheet(
                             .background(GoldAccent.copy(alpha = 0.08f))
                             .padding(horizontal = 12.dp, vertical = 6.dp)
                     ) {
+                        val offsetText = if (reminderOffset == 0) "on time" else "$reminderOffset mins before"
                         Text(
-                            "Users with reminders are 3× more consistent",
+                            "Reminder will be sent $offsetText",
                             style = MaterialTheme.typography.labelSmall,
                             color = GoldAccent.copy(alpha = 0.8f),
                             textAlign = TextAlign.Center

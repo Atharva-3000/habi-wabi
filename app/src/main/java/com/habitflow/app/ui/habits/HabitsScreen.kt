@@ -5,6 +5,7 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -213,22 +214,30 @@ private fun HabitListCard(
 
         Spacer(Modifier.height(14.dp))
 
-        // ── 16-week contribution heatmap ──
+                            // ── 16-week contribution heatmap ──
         val weeks = habitWithStats.gridAlphas.chunked(7)
-        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            weeks.forEach { week ->
-                Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                    week.forEach { alpha ->
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(10.dp)
-                                .clip(RoundedCornerShape(2.dp))
-                                .background(
-                                    if (alpha == 0f) Divider
-                                    else habitColor.copy(alpha = alpha)
-                                )
-                        )
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val gap = 3.dp
+            val weekCount = weeks.size
+            val exactBoxSize = (maxWidth - (gap * (weekCount - 1))) / weekCount
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                weeks.forEach { week ->
+                    Column(verticalArrangement = Arrangement.spacedBy(gap)) {
+                        week.forEach { alpha ->
+                            Box(
+                                modifier = Modifier
+                                    .size(exactBoxSize)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(
+                                        if (alpha == 0f) Divider
+                                        else habitColor.copy(alpha = alpha)
+                                    )
+                            )
+                        }
                     }
                 }
             }
@@ -241,9 +250,9 @@ private fun HabitListCard(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            StatChip(label = "Total", value = "${habitWithStats.totalDone} days", color = habitColor)
-            StatChip(label = "Streak", value = "${habitWithStats.streak} days", color = habitColor)
-            StatChip(label = "Type", value = if (habit.habitType.name == "CHECKMARK") "☑" else "⏱", color = habitColor)
+            StatChip(label = "Total", value = "${habitWithStats.totalDone}", color = habitColor)
+            StatChip(label = "Streak", value = "${habitWithStats.streak}", color = habitColor)
+            StatChip(label = "Format", value = if (habit.habitType.name == "CHECKMARK") "☑" else "⏱", color = habitColor)
         }
     }
 }

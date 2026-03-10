@@ -46,13 +46,22 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setFilter(f: TodoFilter) { _filter.value = f }
 
-    fun addTodo(title: String, date: LocalDate, category: String = "Personal") {
+    fun addTodo(title: String, date: LocalDate, category: String = "Personal", reminderTime: String? = null) {
         if (title.isBlank()) return
         viewModelScope.launch {
             repo.insertTodo(
-                Todo(title = title.trim(), date = date.format(fmt), categoryLabel = category)
+                Todo(
+                    title = title.trim(),
+                    date = date.format(fmt),
+                    categoryLabel = category,
+                    reminderTime = reminderTime
+                )
             )
         }
+    }
+
+    fun updateTodo(todo: Todo) {
+        viewModelScope.launch { repo.updateTodo(todo) }
     }
 
     fun toggleTodo(todo: Todo) {

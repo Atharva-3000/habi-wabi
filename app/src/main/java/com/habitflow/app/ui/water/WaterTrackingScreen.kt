@@ -48,8 +48,9 @@ fun WaterTrackingScreen(
     // Snackbar after adding water
     LaunchedEffect(state.animTrigger) {
         if (state.animTrigger > 0) {
+            val message = if (state.lastAddedMl > 0) "+${state.lastAddedMl}ml added" else "${state.lastAddedMl}ml removed"
             val result = snackbarHostState.showSnackbar(
-                message = "+${state.lastAddedMl}ml added",
+                message = message,
                 actionLabel = "Undo",
                 duration = SnackbarDuration.Short
             )
@@ -142,6 +143,24 @@ fun WaterTrackingScreen(
             ) {
                 items(WaterVessel.values().toList()) { vessel ->
                     VesselChip(vessel = vessel, onTap = { viewModel.addVessel(vessel) })
+                }
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            Text(
+                "Remove water",
+                style = MaterialTheme.typography.titleSmall,
+                color = TextTertiary,
+                modifier = Modifier.padding(horizontal = 24.dp)
+            )
+            Spacer(Modifier.height(8.dp))
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 24.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(WaterVessel.values().take(4)) { vessel ->
+                    RemoveChip(vessel = vessel, onTap = { viewModel.removeVessel(vessel) })
                 }
             }
 
@@ -371,6 +390,25 @@ private fun VesselChip(vessel: WaterVessel, onTap: () -> Unit) {
         ) {
             Text("+${vessel.ml}ml", style = MaterialTheme.typography.labelSmall, color = WaterColor)
         }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REMOVE CHIP
+// ─────────────────────────────────────────────────────────────────────────────
+@Composable
+private fun RemoveChip(vessel: WaterVessel, onTap: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(SurfaceVariant.copy(alpha = 0.5f))
+            .border(1.dp, Divider, RoundedCornerShape(12.dp))
+            .clickable { onTap() }
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text("- ${vessel.ml}ml", style = MaterialTheme.typography.labelSmall, color = TextTertiary)
     }
 }
 
